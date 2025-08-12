@@ -1,75 +1,142 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Button,
+  FlatList,
+  StyleSheet,
+} from "react-native";
+import { supabase } from "../../lib/supabase";
 
 export default function HomeScreen() {
+  const [notes, setNotes] = useState<any>([]);
+  const [newTitle, setNewTitle] = useState("");
+  const [newNote, setNewNote] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchNotes();
+  }, []);
+
+  async function fetchNotes() {
+    const { data, error } = await supabase
+      .from("notes")
+      .select("*")
+      .order("id", { ascending: false });
+    if (!error) setNotes(data);
+    else console.error(error);
+  }
+
+  async function addOrUpdateNote() {
+    if (!newTitle.trim() || !newNote.trim()) return;
+
+    if (editingId) {
+      // UPDATE existing note
+      const { error } = await supabase
+        .from("notes")
+        .update({ title: newTitle, content: newNote })
+        .eq("id", editingId);
+
+      if (!error) {
+        resetForm();
+        fetchNotes();
+      } else {
+        console.error(error);
+      }
+    } else {
+      // INSERT new note
+      const { error } = await supabase
+        .from("notes")
+        .insert([{ title: newTitle, content: newNote }]);
+
+      if (!error) {
+        resetForm();
+        fetchNotes();
+      } else {
+        console.error(error);
+      }
+    }
+  }
+
+  async function deleteNote(id: any) {
+    const { error } = await supabase.from("notes").delete().eq("id", id);
+    if (!error) fetchNotes();
+    else console.error(error);
+  }
+
+  function startEdit(note: any) {
+    setEditingId(note.id);
+    setNewTitle(note.title);
+    setNewNote(note.content);
+  }
+
+  function resetForm() {
+    setNewTitle("");
+    setNewNote("");
+    setEditingId(null);
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <Text style={styles.title}>📒 My Notes</Text>
+
+      {/* Title input */}
+      <TextInput
+        style={styles.input}
+        placeholder="Note title..."
+        value={newTitle}
+        onChangeText={setNewTitle}
+      />
+
+      {/* Content input */}
+      <TextInput
+        style={styles.input}
+        placeholder="Write a note..."
+        value={newNote}
+        onChangeText={setNewNote}
+      />
+
+      <Button
+        title={editingId ? "Update Note" : "Add Note"}
+        onPress={addOrUpdateNote}
+      />
+      {editingId && (
+        <Button title="Cancel Edit" color="gray" onPress={resetForm} />
+      )}
+
+      <FlatList
+        data={notes}
+        keyExtractor={(item: any) => item.id.toString()}
+        renderItem={({ item }) => (
+          <View style={styles.noteItem}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.noteTitle}>{item.title}</Text>
+              <Text>{item.content}</Text>
+            </View>
+            <View style={styles.actions}>
+              <Button title="✏️" onPress={() => startEdit(item)} />
+              <Button title="❌" onPress={() => deleteNote(item.id)} />
+            </View>
+          </View>
+        )}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
+  title: { fontSize: 24, fontWeight: "bold", marginBottom: 10 },
+  input: { borderWidth: 1, borderColor: "#ccc", padding: 8, marginBottom: 10 },
+  noteItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 10,
+    borderBottomWidth: 1,
+    borderColor: "#eee",
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  noteTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 2 },
+  actions: { flexDirection: "row", gap: 5 },
 });
